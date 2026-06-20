@@ -204,21 +204,57 @@ transformBtn.onclick = async () => {
 };
 
 function buildState() {
-  IMP.forms = TR.forms.map(f => {
-    const cols = [];
-    f.rows.forEach(r => { if (r.data && !r.data.__error) Object.keys(r.data).forEach(k => { if (k !== 'kvkId' && !k.startsWith('_') && !cols.includes(k)) cols.push(k); }); });
-    return { sheet: f.sheet, label: f.label, model: f.model, modelMissing: f.modelMissing, fkFields: f.fkFields || {}, requiredFields: f.requiredFields || [], cols, editing: false,
-      rows: f.rows.map(r => ({ data: Object.assign({}, r.data), _kvkId: r._kvkId, _kvkName: r._kvkName, _match: r._match, _issues: r._issues || [], _editKvk: false })) };
+  IMP.forms = TR.forms.map(f => ({
+    sheet: f.sheet, label: f.label, model: f.model, modelMissing: f.modelMissing,
+    fkFields: f.fkFields || {}, requiredFields: f.requiredFields || [], fieldTypes: f.fieldTypes || {},
+    cols: (f.fields && f.fields.length) ? f.fields.slice() : derivedCols(f), editing: false,
+    rows: f.rows.map(r => ({ data: Object.assign({}, r.data), _kvkId: r._kvkId, _kvkName: r._kvkName, _match: r._match, _issues: (r._issues || []).slice(), _editKvk: false }))
+  }));
+}
+function derivedCols(f) { const c = []; f.rows.forEach(r => { if (r.data && !r.data.__error) Object.keys(r.data).forEach(k => { if (k !== 'kvkId' && !k.startsWith('_') && !c.includes(k)) c.push(k); }); }); return c; }
+
+// mandatory-but-empty is computed LIVE here (not on the server) so it updates as you fill cells
+const isEmptyVal = (v) => v == null || String(v).trim() === '';
+function mandatoryIssues(f, r) {
+  if (r.data.__error) return [];
+  const out = [];
+  f.requiredFields.forEach(c => { if (isEmptyVal(r.data[c]) && !(r.data._fk && r.data._fk[c])) out.push({ field: c, message: 'Mandatory on the new site — empty, please fill (or use Auto-fill)', severity: 'warn' }); });
+  return out;
+}
+function allIssues(f, r) { return r._issues.concat(mandatoryIssues(f, r)); }
+function computeTotals() {
+  let rows = 0, mapped = 0, errors = 0, warnings = 0, need = 0;
+  IMP.forms.forEach(f => f.rows.forEach(r => {
+    rows++; if (!(r.data && r.data.__error)) mapped++;
+    const is = allIssues(f, r); errors += is.filter(i => i.severity === 'error').length; warnings += is.filter(i => i.severity === 'warn').length;
+    if (!r._kvkId) need++;
+  }));
+  return { rows, mapped, errors, warnings, need };
+}
+function renderStats(t) {
+  $('stats').innerHTML = statBox('rows', t.rows, 'ROWS') + statBox('mapped', t.mapped, 'MAPPED') + statBox('errors', t.errors, 'ERRORS') + statBox('warns', t.warnings, 'WARNINGS');
+  $('fixhdr').innerHTML =
+    (t.errors ? '<div class="fixhdr">✗ Fix errors before importing — resolve the red items below (e.g. pick a KVK).</div>'
+              : '<div class="box ok">✓ No errors. Fill the red mandatory blanks (or use Auto-fill), then import.</div>')
+    + '<div class="row" style="margin:10px 0 0"><button class="blue" onclick="autofillAll()">⚡ Auto-fill ALL empty mandatory cells (text → A, numbers → 0)</button>'
+    + '<span class="muted" style="font-size:12px">fills the blanks the old site never had, so the new-site forms are complete</span></div>';
+}
+// fill every empty mandatory cell: text -> "A", numbers -> 0 (skips dropdowns/dates/enums)
+function fillRows(f) {
+  f.rows.forEach(r => {
+    if (r.data.__error) return;
+    f.requiredFields.forEach(c => {
+      if (f.fkFields[c] || /Id$/.test(c) || !isEmptyVal(r.data[c])) return;  // never fake a foreign key
+      const t = f.fieldTypes[c] || 'String';
+      if (['Int', 'BigInt', 'Float', 'Decimal'].includes(t)) r.data[c] = 0;
+      else if (t === 'String') r.data[c] = 'A';
+    });
   });
 }
+function autofillForm(fi) { fillRows(IMP.forms[fi]); renderForms(); }
+function autofillAll() { IMP.forms.forEach(fillRows); renderForms(); updateNeedNote(); }
 
 function renderResult() {
-  const t = TR.totals;
-  $('stats').innerHTML =
-    statBox('rows', t.rows, 'ROWS') + statBox('mapped', t.mapped, 'MAPPED') + statBox('errors', t.errors, 'ERRORS') + statBox('warns', t.warnings, 'WARNINGS');
-  $('fixhdr').innerHTML = t.errors
-    ? '<div class="fixhdr">✗ Fix errors before importing — resolve the red items below (e.g. pick a KVK).</div>'
-    : '<div class="box ok">✓ No errors — everything maps cleanly. Review warnings if you like, then import.</div>';
   renderForms();
   $('resultCard').classList.remove('hide');
   $('importCard').classList.remove('hide');
@@ -231,10 +267,13 @@ function kvkOptions(sel) { let h = '<option value="">— choose KVK —</option>
 function masterOptions(key, sel) { const opts = MASTERS[key] || []; let h = '<option value="">— select —</option>'; opts.forEach(o => h += '<option value="' + o.id + '"' + (Number(sel) === o.id ? ' selected' : '') + '>' + esc(o.name) + '</option>'); return h; }
 
 function renderForms() {
+  renderStats(computeTotals());
   $('forms').innerHTML = IMP.forms.map((f, fi) => {
-    const errs = f.rows.reduce((a, r) => a + r._issues.filter(i => i.severity === 'error').length, 0);
-    const warns = f.rows.reduce((a, r) => a + r._issues.filter(i => i.severity === 'warn').length, 0);
-    const badges = '<span class="badge n">' + f.rows.length + ' rows</span>'
+    const rowIssues = f.rows.map(r => allIssues(f, r));
+    const errs = rowIssues.reduce((a, is) => a + is.filter(i => i.severity === 'error').length, 0);
+    const warns = rowIssues.reduce((a, is) => a + is.filter(i => i.severity === 'warn').length, 0);
+    const mandEmpty = f.rows.reduce((a, r) => a + f.requiredFields.filter(c => isEmptyVal(r.data[c]) && !(r.data._fk && r.data._fk[c])).length, 0);
+    const badges = '<span class="badge n">' + f.rows.length + ' rows · ' + f.cols.length + ' fields</span>'
       + (errs ? '<span class="badge f">✗ ' + errs + '</span>' : '')
       + (warns ? '<span class="badge w">⚠ ' + warns + '</span>' : '')
       + (f.modelMissing ? '<span class="badge f">model missing</span>' : '');
@@ -242,28 +281,29 @@ function renderForms() {
 
     // issue list (Row | Field | Issue), like the migration tool
     const issueRows = [];
-    f.rows.forEach((r, ri) => r._issues.forEach(it => issueRows.push(
+    rowIssues.forEach((is, ri) => is.forEach(it => issueRows.push(
       '<tr><td class="rcol">#' + ri + '</td><td class="fcol">' + esc(pretty(it.field)) + '</td><td class="iss-' + (it.severity === 'error' ? 'error' : 'warn') + '">' + esc(it.message) + '</td></tr>')));
     const issueTable = issueRows.length
-      ? '<div class="scroll"><table class="issues"><thead><tr><th>Row</th><th>Field</th><th>Issue</th></tr></thead><tbody>' + issueRows.join('') + '</tbody></table></div>'
+      ? '<div class="scroll" style="max-height:240px"><table class="issues"><thead><tr><th>Row</th><th>Field</th><th>Issue</th></tr></thead><tbody>' + issueRows.join('') + '</tbody></table></div>'
       : '<div class="box ok" style="margin:8px 0">No issues in this form. ✓</div>';
 
-    // editable grid (KVK column + data cells; KVK & Season are dropdowns)
     const need = f.rows.filter(r => !r._kvkId).length;
     const bulk = need ? '<div class="row" style="margin:8px 0"><span class="muted" style="font-size:12px">Set all unmatched rows to:</span>'
       + '<select class="kvksel" id="bulk' + fi + '">' + kvkOptions('') + '</select><button class="lnk" onclick="bulkKvk(' + fi + ')">Apply</button></div>' : '';
+
+    const fillBtn = mandEmpty ? '<button class="lnk" onclick="autofillForm(' + fi + ')">⚡ Auto-fill this form’s ' + mandEmpty + ' empty mandatory cell(s)</button> · ' : '';
+    const legend = '<div class="legend"><span class="req">*</span> mandatory · showing <b>all ' + f.cols.length + ' new-site form fields</b> · '
+      + (mandEmpty ? '<b style="color:#dc2626">' + mandEmpty + ' empty mandatory (red)</b> — ' + fillBtn + '“✎ edit values” to type' : 'all mandatory filled ✓') + '</div>';
+
     const head = '<tr><th>#</th><th class="kvk">KVK <span class="req">*</span></th>' + f.cols.map(c => '<th>' + pretty(c) + (f.requiredFields.includes(c) ? ' <span class="req">*</span>' : '') + '</th>').join('') + '</tr>';
     const grid = f.rows.map((r, ri) => {
-      const cls = !r._kvkId ? ' class="nokvk"' : (r._issues.some(i => i.severity === 'warn') ? ' class="haswarn"' : '');
+      const cls = !r._kvkId ? ' class="nokvk"' : (rowIssues[ri].some(i => i.severity === 'warn') ? ' class="haswarn"' : '');
       const numc = ri + (f.editing ? ' <button class="lnk" title="delete row" onclick="removeRow(' + fi + ',' + ri + ')">✕</button>' : '');
       const cells = f.cols.map(c => renderCell(fi, ri, c, r.data)).join('');
       return '<tr' + cls + '><td style="white-space:nowrap">' + numc + '</td><td class="kvk">' + renderKvk(fi, ri, r) + '</td>' + cells + '</tr>';
     }).join('');
 
-    const mandEmpty = f.rows.reduce((a, r) => a + f.requiredFields.filter(c => { const v = r.data[c]; return v == null || String(v).trim() === ''; }).length, 0);
-    const legend = '<div class="legend"><span class="req">*</span> mandatory on the new site'
-      + (mandEmpty ? ' — <b style="color:#dc2626">' + mandEmpty + ' empty mandatory cell(s)</b> (red) — click “✎ edit values” to fill them' : ' — all mandatory cells are filled ✓') + '</div>';
-    const open = (errs || f.editing) ? ' open' : '';
+    const open = (errs || mandEmpty || f.editing) ? ' open' : '';
     return '<details class="form-acc"' + open + '><summary>' + esc(f.label) + ' <span class="muted">→ ' + esc(f.model) + '</span>' + badges + ' ' + editBtn + '</summary>'
       + '<div class="body">' + issueTable + bulk + legend + '<div class="scroll"><table><thead>' + head + '</thead><tbody>' + grid + '</tbody></table></div></div></details>';
   }).join('');
@@ -312,6 +352,8 @@ $('forms').addEventListener('change', (e) => {
     if (r.data._fk) delete r.data._fk[col];      // user picked one -> don't auto-create
     r._issues = r._issues.filter(i => i.field !== col);  // fixed -> clear the flag
     renderForms();
+  } else if (t.classList && t.classList.contains('ed')) {
+    renderForms();   // text cell left -> refresh live counts/highlights
   }
 });
 
