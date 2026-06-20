@@ -46,7 +46,7 @@ app.post('/api/commit', async (req, res) => {
     } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
-const PORT = process.env.PORT || 5060;
+const PORT = process.env.PORT || 5070;
 app.listen(PORT, () => {
     const target = (process.env.DATABASE_URL || '').replace(/:[^:@/]+@/, ':****@').slice(0, 70);
     console.log(`\n  NICRA / Natural-Farming / Agri-Drone / Seed-Hub uploader  ->  http://localhost:${PORT}`);
