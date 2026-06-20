@@ -114,8 +114,9 @@
 
   <!-- 4. Import -->
   <div class="card hide" id="importCard">
-    <h2><span class="step">4</span>Import</h2>
-    <div class="row">
+    <h2><span class="step">4</span>Import — check the destination KVKs</h2>
+    <div id="dest"></div>
+    <div class="row" style="margin-top:14px">
       <button class="green big" id="commitBtn">Import into database</button>
       <span id="needNote"></span>
     </div>
@@ -128,7 +129,7 @@ let payload = null;     // { data } or { xlsxBase64 } for the upload
 let RAW = null;         // /api/parse response (incl. .data)
 let TR = null;          // /api/transform response
 let IMP = { forms: [] };// editable state
-let KVKS = [], SEASONS = [];
+let KVKS = [], MASTERS = {};  // MASTERS: { season:[{id,name}], nicraDignitaryType:[...], ... }
 
 const $ = (id) => document.getElementById(id);
 const fileEl = $('file'), loadBtn = $('loadBtn'), transformBtn = $('transformBtn'), commitBtn = $('commitBtn');
@@ -193,7 +194,7 @@ transformBtn.onclick = async () => {
     const r = await fetch('/api/transform', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: RAW.data }) });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || 'Transform failed');
-    TR = j; KVKS = j.kvks || []; SEASONS = (j.masters && j.masters.season) || [];
+    TR = j; KVKS = j.kvks || []; MASTERS = j.masters || {};
     buildState(); renderResult();
   } catch (e) { showError(e.message); }
   finally { transformBtn.disabled = false; transformBtn.textContent = 'Transform →'; }
@@ -202,8 +203,8 @@ transformBtn.onclick = async () => {
 function buildState() {
   IMP.forms = TR.forms.map(f => {
     const cols = [];
-    f.rows.forEach(r => { if (r.data && !r.data.__error) Object.keys(r.data).forEach(k => { if (k !== 'kvkId' && !cols.includes(k)) cols.push(k); }); });
-    return { sheet: f.sheet, label: f.label, model: f.model, modelMissing: f.modelMissing, cols, editing: false,
+    f.rows.forEach(r => { if (r.data && !r.data.__error) Object.keys(r.data).forEach(k => { if (k !== 'kvkId' && !k.startsWith('_') && !cols.includes(k)) cols.push(k); }); });
+    return { sheet: f.sheet, label: f.label, model: f.model, modelMissing: f.modelMissing, fkFields: f.fkFields || {}, cols, editing: false,
       rows: f.rows.map(r => ({ data: Object.assign({}, r.data), _kvkId: r._kvkId, _kvkName: r._kvkName, _match: r._match, _issues: r._issues || [], _editKvk: false })) };
   });
 }
@@ -224,7 +225,7 @@ function renderResult() {
 function statBox(cls, n, l) { return '<div class="stat ' + cls + '"><div class="n">' + n + '</div><div class="l">' + l + '</div></div>'; }
 
 function kvkOptions(sel) { let h = '<option value="">— choose KVK —</option>'; KVKS.forEach(k => h += '<option value="' + k.kvkId + '"' + (Number(sel) === k.kvkId ? ' selected' : '') + '>#' + k.kvkId + ' · ' + esc(k.kvkName) + '</option>'); return h; }
-function seasonOptions(sel) { let h = '<option value="">— season —</option>'; SEASONS.forEach(s => h += '<option value="' + s.id + '"' + (Number(sel) === s.id ? ' selected' : '') + '>' + esc(s.name) + '</option>'); return h; }
+function masterOptions(key, sel) { const opts = MASTERS[key] || []; let h = '<option value="">— select —</option>'; opts.forEach(o => h += '<option value="' + o.id + '"' + (Number(sel) === o.id ? ' selected' : '') + '>' + esc(o.name) + '</option>'); return h; }
 
 function renderForms() {
   $('forms').innerHTML = IMP.forms.map((f, fi) => {
@@ -275,7 +276,8 @@ function renderKvk(fi, ri, r) {
 function renderCell(fi, ri, c, d) {
   const v = d[c];
   if (d.__error) return '<td class="muted">map error</td>';
-  if (c === 'seasonId') return '<td><select class="seasonsel" data-fi="' + fi + '" data-ri="' + ri + '">' + seasonOptions(v) + '</select></td>';
+  const fkmaster = IMP.forms[fi].fkFields[c];
+  if (fkmaster) return '<td><select class="fksel" data-fi="' + fi + '" data-ri="' + ri + '" data-col="' + esc(c) + '" data-master="' + esc(fkmaster) + '">' + masterOptions(fkmaster, v) + '</select></td>';
   if (IMP.forms[fi].editing) return '<td><input class="ed" data-fi="' + fi + '" data-ri="' + ri + '" data-col="' + esc(c) + '" value="' + esc(v) + '"></td>';
   return '<td title="' + esc(v) + '">' + cell(v) + '</td>';
 }
@@ -295,9 +297,11 @@ $('forms').addEventListener('change', (e) => {
   if (t.classList && t.classList.contains('kvksel') && !t.id.startsWith('bulk')) {
     const r = IMP.forms[+t.dataset.fi].rows[+t.dataset.ri]; r._kvkId = Number(t.value) || null; r._match = null; r._editKvk = false; if (r._kvkId) clearKvkIssue(r);
     renderForms(); updateNeedNote();
-  } else if (t.classList && t.classList.contains('seasonsel')) {
-    const r = IMP.forms[+t.dataset.fi].rows[+t.dataset.ri]; r.data.seasonId = Number(t.value) || undefined;
-    r._issues = r._issues.filter(i => i.field !== 'seasonId');  // fixed -> clear the flag
+  } else if (t.classList && t.classList.contains('fksel')) {
+    const r = IMP.forms[+t.dataset.fi].rows[+t.dataset.ri]; const col = t.dataset.col;
+    r.data[col] = Number(t.value) || undefined;
+    if (r.data._fk) delete r.data._fk[col];      // user picked one -> don't auto-create
+    r._issues = r._issues.filter(i => i.field !== col);  // fixed -> clear the flag
     renderForms();
   }
 });
@@ -306,16 +310,52 @@ function updateNeedNote() {
   const need = IMP.forms.reduce((a, f) => a + f.rows.filter(r => !r._kvkId).length, 0);
   $('needNote').textContent = need ? (need + ' row(s) still have no KVK — they will be skipped.') : 'All rows have a KVK.';
   $('needNote').className = need ? 'badge w' : 'badge ok';
+  renderDest();
+}
+
+// per-KVK destination breakdown + a filter so you can import just one KVK
+function kvkDistribution() {
+  const dist = {}; let noKvk = 0;
+  IMP.forms.forEach(f => f.rows.forEach(r => {
+    if (!r._kvkId) { noKvk++; return; }
+    const d = dist[r._kvkId] || (dist[r._kvkId] = { count: 0, forms: {} });
+    d.count++; d.forms[f.label] = (d.forms[f.label] || 0) + 1;
+  }));
+  return { dist, noKvk };
+}
+function kvkName(id) { const k = KVKS.find(k => k.kvkId === id); return k ? k.kvkName : ('#' + id); }
+function renderDest() {
+  const prev = $('destKvk') ? $('destKvk').value : '';
+  const { dist, noKvk } = kvkDistribution();
+  const ids = Object.keys(dist).map(Number).sort((a, b) => a - b);
+  const total = ids.reduce((a, id) => a + dist[id].count, 0);
+  let opts = '<option value="">▼ All KVKs in this file (' + ids.length + ' KVKs · ' + total + ' rows)</option>';
+  ids.forEach(id => opts += '<option value="' + id + '"' + (String(id) === prev ? ' selected' : '') + '>#' + id + ' · ' + esc(kvkName(id)) + ' — ' + dist[id].count + ' rows</option>');
+  const rows = ids.map(id => {
+    const fl = Object.entries(dist[id].forms).map(([k, v]) => esc(k) + ' (' + v + ')').join(', ');
+    return '<tr><td><b>#' + id + ' ' + esc(kvkName(id)) + '</b></td><td>' + dist[id].count + ' rows</td><td class="muted" style="white-space:normal">' + fl + '</td></tr>';
+  }).join('');
+  $('dest').innerHTML =
+    '<div class="box warn" style="margin-top:0"><b>Every row goes to its OWN KVK</b> (read from the file) — review the destinations below before importing'
+    + (noKvk ? (' · <span style="color:#b45309">' + noKvk + ' row(s) have no KVK and will be skipped</span>') : '') + '.</div>'
+    + '<div class="row" style="margin:12px 0 4px"><b>Import:</b> <select id="destKvk">' + opts + '</select>'
+    + '<span class="muted" style="font-size:12px">choose one KVK to import only its rows, or leave on “All”.</span></div>'
+    + '<div class="scroll"><table><thead><tr><th>Destination KVK</th><th>Rows</th><th>Forms (rows)</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 
 commitBtn.onclick = async () => {
   clearError();
+  const sel = ($('destKvk') && $('destKvk').value) ? Number($('destKvk').value) : null;
+  const keep = (r) => r._kvkId && (!sel || r._kvkId === sel);
+  const count = IMP.forms.reduce((a, f) => a + f.rows.filter(keep).length, 0);
+  if (!count) return showError(sel ? 'No rows for that KVK.' : 'Nothing to import.');
+  const dest = sel ? ('KVK #' + sel + ' ' + kvkName(sel)) : ('ALL KVKs in the file');
   const need = IMP.forms.reduce((a, f) => a + f.rows.filter(r => !r._kvkId).length, 0);
-  if (need && !confirm(need + ' row(s) have no KVK and will be SKIPPED. Import the rest anyway?')) return;
-  if (!confirm('Import this data into the database now?')) return;
+  if (!sel && need && !confirm(need + ' row(s) have no KVK and will be SKIPPED. Continue?')) return;
+  if (!confirm('Import ' + count + ' row(s) into ' + dest + '?\n\nThis writes to the database.')) return;
   commitBtn.disabled = true; commitBtn.textContent = 'Importing…';
   try {
-    const forms = IMP.forms.map(f => ({ sheet: f.sheet, model: f.model, records: f.rows.map(r => Object.assign({}, r.data, { _kvkId: r._kvkId, _kvkName: r._kvkName })) })).filter(f => f.records.length);
+    const forms = IMP.forms.map(f => ({ sheet: f.sheet, model: f.model, records: f.rows.filter(keep).map(r => Object.assign({}, r.data, { _kvkId: r._kvkId, _kvkName: r._kvkName })) })).filter(f => f.records.length);
     const r = await fetch('/api/commit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ forms }) });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || 'Import failed');
