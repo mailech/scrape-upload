@@ -9,7 +9,7 @@
 const express = require('express');
 const path = require('path');
 const prisma = require('./config/db');
-const { analyze, commit } = require('./lib/engine');
+const { parse, transform, commit } = require('./lib/engine');
 const { xlsxToSheets } = require('./lib/xlsxToSheets');
 
 const app = express();
@@ -30,10 +30,19 @@ app.get('/api/health', async (req, res) => {
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post('/api/preview', async (req, res) => {
+// phase 1: parse the upload -> raw old-site rows grouped by sheet. No DB, no mapping.
+app.post('/api/parse', async (req, res) => {
     try {
         const data = await toData(req.body);
-        const report = await analyze({ prisma, data });
+        res.json(Object.assign({ data }, parse({ data })));
+    } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+// phase 2: transform -> mapped records + validation report (errors/warnings). No writes.
+app.post('/api/transform', async (req, res) => {
+    try {
+        const data = await toData(req.body);
+        const report = await transform({ prisma, data });
         res.json(report);
     } catch (e) { res.status(400).json({ error: e.message }); }
 });

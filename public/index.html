@@ -7,7 +7,7 @@
 <style>
   * { box-sizing: border-box; }
   body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; background: #f6f7f9; color: #1f2937; }
-  .wrap { max-width: 1100px; margin: 0 auto; padding: 28px 20px 90px; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 28px 20px 90px; }
   h1 { font-size: 22px; margin: 0 0 4px; }
   .sub { color: #6b7280; font-size: 14px; margin: 0 0 6px; }
   .dbline { color:#9ca3af; font-size:12px; margin:0 0 22px; }
@@ -18,25 +18,34 @@
   button:disabled { opacity: .5; cursor: not-allowed; }
   .blue { background: #2563eb; color: #fff; }
   .green { background: #16a34a; color: #fff; }
+  .big { padding: 11px 22px; font-size: 15px; font-weight: 600; }
   select, input[type=file] { font-size: 14px; padding: 8px; border: 1px solid #d1d5db; border-radius: 8px; background:#fff; }
   .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
   .muted { color: #9ca3af; }
-  .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; font-weight:600; }
-  .pill.ok { background:#dcfce7; color:#166534; }
-  .pill.warn { background:#fef3c7; color:#92400e; }
-  .pill.bad { background:#fee2e2; color:#991b1b; }
   .box { border-radius:8px; padding:12px; font-size:13px; margin-top:10px; }
   .box.warn { background:#fffbeb; border:1px solid #fde68a; }
   .box.bad { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; }
   .box.ok { background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; }
   code { background:#f3f4f6; padding:1px 4px; border-radius:4px; }
   .hide { display: none; }
+
+  /* stat band (ROWS / MAPPED / ERRORS / WARNINGS) */
+  .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin:4px 0 16px; }
+  .stat { border-radius:10px; padding:14px; text-align:center; }
+  .stat .n { font-size:26px; font-weight:700; line-height:1; }
+  .stat .l { font-size:12px; letter-spacing:.04em; margin-top:6px; }
+  .stat.rows { background:#f3f4f6; } .stat.rows .n { color:#374151; }
+  .stat.mapped { background:#eff6ff; } .stat.mapped .n { color:#2563eb; } .stat.mapped .l { color:#2563eb; }
+  .stat.errors { background:#fef2f2; } .stat.errors .n { color:#dc2626; } .stat.errors .l { color:#dc2626; }
+  .stat.warns { background:#fffbeb; } .stat.warns .n { color:#b45309; } .stat.warns .l { color:#b45309; }
+  .fixhdr { color:#dc2626; font-weight:700; font-size:15px; margin:6px 0 12px; }
+
   .form-acc { border:1px solid #e5e7eb; border-radius:8px; margin-bottom:8px; }
-  .form-acc > summary { padding:10px 12px; font-size:13px; font-weight:600; color:#1f2937; list-style:none; }
+  .form-acc > summary { padding:10px 12px; font-size:13px; font-weight:600; color:#1f2937; list-style:none; cursor:pointer; }
   .form-acc > summary::-webkit-details-marker { display:none; }
   .form-acc > summary:before { content:'\25B8'; margin-right:8px; color:#9ca3af; }
   .form-acc[open] > summary:before { content:'\25BE'; }
-  .form-acc .body { padding:0 12px 12px; }
+  .form-acc .body { padding:0 12px 14px; }
   .badge { font-size:11px; font-weight:600; padding:1px 7px; border-radius:999px; margin-left:6px; }
   .badge.n { background:#eef2ff; color:#3730a3; }
   .badge.ok { background:#dcfce7; color:#166534; }
@@ -44,24 +53,32 @@
   .badge.f { background:#fee2e2; color:#991b1b; }
   .badge.exact { background:#dcfce7; color:#166534; }
   .badge.fuzzy { background:#fef3c7; color:#92400e; }
-  .scroll { overflow-x:auto; border:1px solid #f0f0f0; border-radius:6px; }
+
+  .scroll { overflow-x:auto; border:1px solid #f0f0f0; border-radius:6px; margin-top:8px; }
   table { width:100%; border-collapse:collapse; font-size:12px; white-space:nowrap; }
   th, td { text-align:left; padding:6px 8px; border-bottom:1px solid #f0f0f0; vertical-align:top; }
   th { color:#6b7280; font-weight:600; background:#f9fafb; position:sticky; top:0; }
+  /* issue list */
+  table.issues td { white-space:normal; }
+  table.issues .rcol { color:#6b7280; white-space:nowrap; width:46px; }
+  table.issues .fcol { color:#374151; font-weight:600; white-space:nowrap; }
+  .iss-error { color:#dc2626; }
+  .iss-warn { color:#b45309; }
+  /* grid */
   td.kvk { min-width:210px; white-space:normal; }
-  tr.warnrow td { background:#fffbeb; }
   tr.nokvk td { background:#fff7f7; }
+  tr.haswarn td { background:#fffdf6; }
   .lnk { background:none; border:0; color:#2563eb; font-size:12px; cursor:pointer; padding:0 4px; font-weight:600; }
   .lnk:hover { text-decoration:underline; }
   input.ed { width:100%; min-width:90px; font-size:12px; padding:3px 5px; border:1px solid #d1d5db; border-radius:4px; }
-  select.kvksel { font-size:12px; padding:4px 6px; max-width:230px; }
-  .wmsg { color:#92400e; font-size:11px; margin-top:3px; }
+  select.kvksel, select.seasonsel { font-size:12px; padding:4px 6px; max-width:230px; }
+  .wmsg { color:#b45309; font-size:11px; margin-top:3px; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>NICRA · Natural-Farming · Agri-Drone · Seed-Hub Import</h1>
-  <p class="sub">Upload a scraped <b>JSON</b> or <b>Excel (.xlsx)</b> file, review what will be imported, fix any unmatched KVKs, then import. This is a <b>superadmin</b> scrape — every row goes to its own KVK.</p>
+  <p class="sub">Superadmin scrape (many KVKs in one file). <b>Upload</b> → see the old data → <b>Transform</b> into our forms → review errors/warnings → <b>Import</b>. Each row goes to its own KVK.</p>
   <p class="dbline" id="dbline">checking database…</p>
 
   <!-- 1. Upload -->
@@ -69,143 +86,179 @@
     <h2><span class="step">1</span>Upload file</h2>
     <div class="row">
       <input type="file" id="file" accept=".xlsx,.xls,.json" />
-      <button class="blue" id="previewBtn" disabled>Preview</button>
+      <button class="blue" id="loadBtn" disabled>Load</button>
       <span id="fileName" class="muted"></span>
     </div>
   </div>
 
   <div id="error" class="box bad hide"></div>
 
-  <!-- 2. Results -->
+  <!-- 2. Old data -->
+  <div class="card hide" id="rawCard">
+    <h2><span class="step">2</span>Old data (as scraped)</h2>
+    <p id="rawSummary" class="muted"></p>
+    <div id="raw"></div>
+    <div class="row" style="margin-top:16px">
+      <button class="blue big" id="transformBtn">Transform →</button>
+      <span class="muted">maps the old rows into our forms — no data is written</span>
+    </div>
+  </div>
+
+  <!-- 3. Transformed + validation -->
   <div class="card hide" id="resultCard">
-    <h2><span class="step">2</span>What will be imported</h2>
-    <p id="summary"></p>
-    <div id="issues"></div>
-    <h3 style="font-size:14px;margin:18px 0 8px;">Review each form <span class="muted" style="font-weight:400">— expand to check every row and its KVK; fix any unmatched ones</span></h3>
+    <h2><span class="step">3</span>Transformed data &amp; validation</h2>
+    <div class="stats" id="stats"></div>
+    <div id="fixhdr"></div>
     <div id="forms"></div>
   </div>
 
-  <!-- 3. Import -->
+  <!-- 4. Import -->
   <div class="card hide" id="importCard">
-    <h2><span class="step">3</span>Import</h2>
+    <h2><span class="step">4</span>Import</h2>
     <div class="row">
-      <button class="green" id="commitBtn">Import into database</button>
-      <span id="needNote" class="muted"></span>
+      <button class="green big" id="commitBtn">Import into database</button>
+      <span id="needNote"></span>
     </div>
     <div id="commitResult"></div>
   </div>
 </div>
 
 <script>
-let payload = null;        // { data } or { xlsxBase64 }
-let PREVIEW = null;        // full /api/preview response
-let IMP = { forms: [] };   // editable state
-let KVKS = [];
+let payload = null;     // { data } or { xlsxBase64 } for the upload
+let RAW = null;         // /api/parse response (incl. .data)
+let TR = null;          // /api/transform response
+let IMP = { forms: [] };// editable state
+let KVKS = [], SEASONS = [];
 
 const $ = (id) => document.getElementById(id);
-const fileEl = $('file'), previewBtn = $('previewBtn'), commitBtn = $('commitBtn');
+const fileEl = $('file'), loadBtn = $('loadBtn'), transformBtn = $('transformBtn'), commitBtn = $('commitBtn');
 const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 const pretty = (k) => k.replace(/([A-Z])/g, ' $1').replace(/ Id\b/, '').replace(/^./, c => c.toUpperCase()).trim();
-const cell = (v) => { if (v === null || v === undefined || v === '') return '<span class="muted">—</span>'; const s = String(v); return s.length > 120 ? s.slice(0, 120) + '…' : esc(s); };
+const cell = (v) => { if (v === null || v === undefined || v === '') return '<span class="muted">—</span>'; const s = String(v); return s.length > 120 ? esc(s.slice(0, 120)) + '…' : esc(s); };
 
-function showError(msg) { const e = $('error'); e.textContent = msg; e.classList.remove('hide'); }
+function showError(m) { const e = $('error'); e.textContent = m; e.classList.remove('hide'); }
 function clearError() { $('error').classList.add('hide'); }
 function readBase64(file) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = () => rej(new Error('Could not read file')); r.readAsDataURL(file); }); }
 
-// db health
 fetch('/api/health').then(r => r.json()).then(h => {
-  $('dbline').innerHTML = h.ok
-    ? '✓ connected — <b>' + h.kvks + '</b> KVKs · <code>' + esc(h.db) + '</code>'
-    : '⚠ database error: ' + esc(h.error || '');
+  $('dbline').innerHTML = h.ok ? '✓ connected — <b>' + h.kvks + '</b> KVKs · <code>' + esc(h.db) + '</code>' : '⚠ database error: ' + esc(h.error || '');
 }).catch(() => { $('dbline').textContent = 'database unreachable'; });
 
 fileEl.onchange = async () => {
-  clearError(); payload = null; previewBtn.disabled = true;
-  $('resultCard').classList.add('hide'); $('importCard').classList.add('hide'); $('commitResult').innerHTML = '';
+  clearError(); payload = null; loadBtn.disabled = true;
+  ['rawCard', 'resultCard', 'importCard'].forEach(id => $(id).classList.add('hide')); $('commitResult').innerHTML = '';
   const f = fileEl.files[0]; if (!f) return;
   $('fileName').textContent = f.name;
   try {
     if (f.name.toLowerCase().endsWith('.json')) payload = { data: JSON.parse(await f.text()) };
     else if (/\.xlsx?$/i.test(f.name)) payload = { xlsxBase64: await readBase64(f) };
     else return showError('Please choose a .xlsx or .json file.');
-    previewBtn.disabled = false;
+    loadBtn.disabled = false;
   } catch (e) { showError('Could not read that file: ' + e.message); }
 };
 
-previewBtn.onclick = async () => {
-  clearError(); previewBtn.disabled = true; previewBtn.textContent = 'Reading…';
+// ---- phase 1: load + show old data ----
+loadBtn.onclick = async () => {
+  clearError(); loadBtn.disabled = true; loadBtn.textContent = 'Reading…';
   try {
-    const r = await fetch('/api/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const r = await fetch('/api/parse', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     const j = await r.json();
-    if (!r.ok) throw new Error(j.error || 'Preview failed');
-    PREVIEW = j; KVKS = j.kvks || [];
-    renderResult();
+    if (!r.ok) throw new Error(j.error || 'Could not read file');
+    RAW = j; renderRaw();
   } catch (e) { showError(e.message); }
-  finally { previewBtn.disabled = false; previewBtn.textContent = 'Preview'; }
+  finally { loadBtn.disabled = false; loadBtn.textContent = 'Load'; }
 };
 
+function renderRaw() {
+  const t = RAW.totals;
+  $('rawSummary').innerHTML = '<b>' + t.rows + '</b> rows in <b>' + t.sheets + '</b> sheets — '
+    + t.recognised + ' recognised' + (t.unrecognised ? ', <span style="color:#b45309">' + t.unrecognised + ' not handled (ignored)</span>' : '') + '.';
+  $('raw').innerHTML = RAW.sheets.map((s, i) => {
+    const name = s.label ? (esc(s.label) + ' <span class="muted">(' + esc(s.sheet) + ')</span>') : ('<span style="color:#b45309">' + esc(s.sheet) + ' — not handled</span>');
+    const cols = s.headers.length ? s.headers : (s.rows[0] ? Object.keys(s.rows[0]) : []);
+    const head = '<tr>' + cols.map(c => '<th>' + esc(c) + '</th>').join('') + '</tr>';
+    const body = s.rows.slice(0, 50).map(row => '<tr>' + cols.map(c => '<td title="' + esc(row[c]) + '">' + cell(row[c]) + '</td>').join('') + '</tr>').join('');
+    const more = s.rows.length > 50 ? '<div class="muted" style="padding:6px 8px">… and ' + (s.rows.length - 50) + ' more rows</div>' : '';
+    return '<details class="form-acc"><summary>' + name + '<span class="badge n">' + s.count + ' rows</span></summary>'
+      + '<div class="body"><div class="scroll"><table><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>' + more + '</div></details>';
+  }).join('');
+  $('rawCard').classList.remove('hide');
+  $('rawCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ---- phase 2: transform ----
+transformBtn.onclick = async () => {
+  clearError(); transformBtn.disabled = true; transformBtn.textContent = 'Transforming…';
+  try {
+    const r = await fetch('/api/transform', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: RAW.data }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || 'Transform failed');
+    TR = j; KVKS = j.kvks || []; SEASONS = (j.masters && j.masters.season) || [];
+    buildState(); renderResult();
+  } catch (e) { showError(e.message); }
+  finally { transformBtn.disabled = false; transformBtn.textContent = 'Transform →'; }
+};
+
+function buildState() {
+  IMP.forms = TR.forms.map(f => {
+    const cols = [];
+    f.rows.forEach(r => { if (r.data && !r.data.__error) Object.keys(r.data).forEach(k => { if (k !== 'kvkId' && !cols.includes(k)) cols.push(k); }); });
+    return { sheet: f.sheet, label: f.label, model: f.model, modelMissing: f.modelMissing, cols, editing: false,
+      rows: f.rows.map(r => ({ data: Object.assign({}, r.data), _kvkId: r._kvkId, _kvkName: r._kvkName, _match: r._match, _issues: r._issues || [], _editKvk: false })) };
+  });
+}
+
 function renderResult() {
-  $('summary').innerHTML = '<b>' + PREVIEW.totals.rows + '</b> rows across <b>' + PREVIEW.totals.forms + '</b> forms.';
-
-  let html = '';
-  if (PREVIEW.totals.rowsNeedingKvk) {
-    html += '<div class="box warn"><b>' + PREVIEW.totals.rowsNeedingKvk + ' row(s) need a KVK</b> — their "KVK Name" didn\'t match automatically. Pick the right KVK on those rows (highlighted) before importing.'
-      + (PREVIEW.unmatchedKvkNames.length ? '<div class="muted" style="margin-top:6px">Unmatched names: ' + PREVIEW.unmatchedKvkNames.map(n => '“' + esc(n) + '”').join(', ') + '</div>' : '') + '</div>';
-  } else {
-    html += '<div class="box ok">✓ Every row matched a KVK automatically.</div>';
-  }
-  if ((PREVIEW.unmappedSheets || []).length) html += '<div class="box warn"><b>Sheets this tool doesn\'t handle (ignored):</b> ' + PREVIEW.unmappedSheets.map(s => '<code>' + esc(s) + '</code>').join(' ') + '</div>';
-  $('issues').innerHTML = html;
-
-  buildState();
+  const t = TR.totals;
+  $('stats').innerHTML =
+    statBox('rows', t.rows, 'ROWS') + statBox('mapped', t.mapped, 'MAPPED') + statBox('errors', t.errors, 'ERRORS') + statBox('warns', t.warnings, 'WARNINGS');
+  $('fixhdr').innerHTML = t.errors
+    ? '<div class="fixhdr">✗ Fix errors before importing — resolve the red items below (e.g. pick a KVK).</div>'
+    : '<div class="box ok">✓ No errors — everything maps cleanly. Review warnings if you like, then import.</div>';
   renderForms();
   $('resultCard').classList.remove('hide');
   $('importCard').classList.remove('hide');
   updateNeedNote();
+  $('resultCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
+function statBox(cls, n, l) { return '<div class="stat ' + cls + '"><div class="n">' + n + '</div><div class="l">' + l + '</div></div>'; }
 
-function buildState() {
-  IMP.forms = PREVIEW.forms.map(f => {
-    const cols = [];
-    f.rows.forEach(r => { if (r.data && !r.data.__error) Object.keys(r.data).forEach(k => { if (k !== 'kvkId' && !cols.includes(k)) cols.push(k); }); });
-    return { sheet: f.sheet, label: f.label, model: f.model, modelMissing: f.modelMissing, editing: false, cols,
-      rows: f.rows.map(r => ({ data: Object.assign({}, r.data), _kvkId: r._kvkId, _kvkName: r._kvkName, _match: r._match, _matchedName: r._matchedName, _warnings: r._warnings || [], _editKvk: false })) };
-  });
-}
-
-function kvkOptions(selected) {
-  let h = '<option value="">— choose KVK —</option>';
-  KVKS.forEach(k => { h += '<option value="' + k.kvkId + '"' + (Number(selected) === k.kvkId ? ' selected' : '') + '>#' + k.kvkId + ' · ' + esc(k.kvkName) + '</option>'; });
-  return h;
-}
+function kvkOptions(sel) { let h = '<option value="">— choose KVK —</option>'; KVKS.forEach(k => h += '<option value="' + k.kvkId + '"' + (Number(sel) === k.kvkId ? ' selected' : '') + '>#' + k.kvkId + ' · ' + esc(k.kvkName) + '</option>'); return h; }
+function seasonOptions(sel) { let h = '<option value="">— season —</option>'; SEASONS.forEach(s => h += '<option value="' + s.id + '"' + (Number(sel) === s.id ? ' selected' : '') + '>' + esc(s.name) + '</option>'); return h; }
 
 function renderForms() {
   $('forms').innerHTML = IMP.forms.map((f, fi) => {
-    const matched = f.rows.filter(r => r._kvkId).length;
-    const need = f.rows.length - matched;
+    const errs = f.rows.reduce((a, r) => a + r._issues.filter(i => i.severity === 'error').length, 0);
+    const warns = f.rows.reduce((a, r) => a + r._issues.filter(i => i.severity === 'warn').length, 0);
     const badges = '<span class="badge n">' + f.rows.length + ' rows</span>'
-      + '<span class="badge ok">' + matched + ' matched</span>'
-      + (need ? '<span class="badge f">' + need + ' need KVK</span>' : '')
+      + (errs ? '<span class="badge f">✗ ' + errs + '</span>' : '')
+      + (warns ? '<span class="badge w">⚠ ' + warns + '</span>' : '')
       + (f.modelMissing ? '<span class="badge f">model missing</span>' : '');
-    const editBtn = '<button class="lnk" onclick="toggleEdit(event,' + fi + ')">' + (f.editing ? '✓ done' : '✎ edit values') + '</button>';
+    const editBtn = '<button class="lnk" onclick="toggleEdit(event,' + fi + ')">' + (f.editing ? '✓ done editing' : '✎ edit values') + '</button>';
 
-    // bulk-assign control for unmatched rows
-    let bulk = '';
-    if (need) bulk = '<div class="row" style="margin:8px 0"><span class="muted" style="font-size:12px">Set all unmatched rows to:</span>'
-      + '<select class="kvksel" id="bulk' + fi + '">' + kvkOptions('') + '</select>'
-      + '<button class="lnk" onclick="bulkKvk(' + fi + ')">Apply</button></div>';
+    // issue list (Row | Field | Issue), like the migration tool
+    const issueRows = [];
+    f.rows.forEach((r, ri) => r._issues.forEach(it => issueRows.push(
+      '<tr><td class="rcol">#' + ri + '</td><td class="fcol">' + esc(pretty(it.field)) + '</td><td class="iss-' + (it.severity === 'error' ? 'error' : 'warn') + '">' + esc(it.message) + '</td></tr>')));
+    const issueTable = issueRows.length
+      ? '<div class="scroll"><table class="issues"><thead><tr><th>Row</th><th>Field</th><th>Issue</th></tr></thead><tbody>' + issueRows.join('') + '</tbody></table></div>'
+      : '<div class="box ok" style="margin:8px 0">No issues in this form. ✓</div>';
 
+    // editable grid (KVK column + data cells; KVK & Season are dropdowns)
+    const need = f.rows.filter(r => !r._kvkId).length;
+    const bulk = need ? '<div class="row" style="margin:8px 0"><span class="muted" style="font-size:12px">Set all unmatched rows to:</span>'
+      + '<select class="kvksel" id="bulk' + fi + '">' + kvkOptions('') + '</select><button class="lnk" onclick="bulkKvk(' + fi + ')">Apply</button></div>' : '';
     const head = '<tr><th>#</th><th class="kvk">KVK</th>' + f.cols.map(c => '<th>' + pretty(c) + '</th>').join('') + '</tr>';
-    const rows = f.rows.map((r, ri) => {
-      const cls = !r._kvkId ? ' class="nokvk"' : (r._warnings.length ? ' class="warnrow"' : '');
+    const grid = f.rows.map((r, ri) => {
+      const cls = !r._kvkId ? ' class="nokvk"' : (r._issues.some(i => i.severity === 'warn') ? ' class="haswarn"' : '');
+      const numc = ri + (f.editing ? ' <button class="lnk" title="delete row" onclick="removeRow(' + fi + ',' + ri + ')">✕</button>' : '');
       const cells = f.cols.map(c => renderCell(fi, ri, c, r.data)).join('');
-      const num = (ri + 1) + (f.editing ? ' <button class="lnk" title="delete this row" onclick="removeRow(' + fi + ',' + ri + ')">✕</button>' : '');
-      const warn = r._warnings.length ? '<div class="wmsg">⚠ ' + r._warnings.map(esc).join(' · ') + '</div>' : '';
-      return '<tr' + cls + '><td style="white-space:nowrap">' + num + '</td><td class="kvk">' + renderKvk(fi, ri, r) + warn + '</td>' + cells + '</tr>';
+      return '<tr' + cls + '><td style="white-space:nowrap">' + numc + '</td><td class="kvk">' + renderKvk(fi, ri, r) + '</td>' + cells + '</tr>';
     }).join('');
 
-    return '<details class="form-acc"' + (need || f.editing ? ' open' : '') + '><summary>' + esc(f.label) + badges + ' ' + editBtn + '</summary>'
-      + '<div class="body">' + bulk + '<div class="scroll"><table><thead>' + head + '</thead><tbody>' + rows + '</tbody></table></div></div></details>';
+    const open = (errs || f.editing) ? ' open' : '';
+    return '<details class="form-acc"' + open + '><summary>' + esc(f.label) + ' <span class="muted">→ ' + esc(f.model) + '</span>' + badges + ' ' + editBtn + '</summary>'
+      + '<div class="body">' + issueTable + bulk + '<div class="scroll"><table><thead>' + head + '</thead><tbody>' + grid + '</tbody></table></div></div></details>';
   }).join('');
 }
 
@@ -213,8 +266,7 @@ function renderKvk(fi, ri, r) {
   if (r._kvkId && !r._editKvk) {
     const k = KVKS.find(k => k.kvkId === r._kvkId);
     const badge = r._match ? '<span class="badge ' + r._match + '">' + r._match + '</span>' : '<span class="badge ok">set</span>';
-    const from = (r._kvkName && r._match === 'fuzzy') ? '<div class="muted" style="font-size:11px">from: ' + esc(r._kvkName) + '</div>' : '';
-    return '#' + r._kvkId + ' ' + esc(k ? k.kvkName : '') + ' ' + badge + ' <button class="lnk" onclick="editKvk(' + fi + ',' + ri + ')">change</button>' + from;
+    return '#' + r._kvkId + ' ' + esc(k ? k.kvkName : '') + ' ' + badge + ' <button class="lnk" onclick="editKvk(' + fi + ',' + ri + ')">change</button>';
   }
   const warn = !r._kvkId ? '<div class="wmsg">⚠ unmatched: ' + esc(r._kvkName || '(blank)') + '</div>' : '';
   return '<select class="kvksel" data-fi="' + fi + '" data-ri="' + ri + '">' + kvkOptions(r._kvkId) + '</select>' + warn;
@@ -223,6 +275,7 @@ function renderKvk(fi, ri, r) {
 function renderCell(fi, ri, c, d) {
   const v = d[c];
   if (d.__error) return '<td class="muted">map error</td>';
+  if (c === 'seasonId') return '<td><select class="seasonsel" data-fi="' + fi + '" data-ri="' + ri + '">' + seasonOptions(v) + '</select></td>';
   if (IMP.forms[fi].editing) return '<td><input class="ed" data-fi="' + fi + '" data-ri="' + ri + '" data-col="' + esc(c) + '" value="' + esc(v) + '"></td>';
   return '<td title="' + esc(v) + '">' + cell(v) + '</td>';
 }
@@ -230,23 +283,29 @@ function renderCell(fi, ri, c, d) {
 function toggleEdit(e, fi) { e.preventDefault(); e.stopPropagation(); IMP.forms[fi].editing = !IMP.forms[fi].editing; renderForms(); }
 function removeRow(fi, ri) { IMP.forms[fi].rows.splice(ri, 1); renderForms(); updateNeedNote(); }
 function editKvk(fi, ri) { IMP.forms[fi].rows[ri]._editKvk = true; renderForms(); }
-function bulkKvk(fi) { const v = Number($('bulk' + fi).value) || null; if (!v) return; IMP.forms[fi].rows.forEach(r => { if (!r._kvkId) { r._kvkId = v; r._match = null; r._editKvk = false; } }); renderForms(); updateNeedNote(); }
+function bulkKvk(fi) { const v = Number($('bulk' + fi).value) || null; if (!v) return; IMP.forms[fi].rows.forEach(r => { if (!r._kvkId) { r._kvkId = v; r._match = null; r._editKvk = false; clearKvkIssue(r); } }); renderForms(); updateNeedNote(); }
+function clearKvkIssue(r) { r._issues = r._issues.filter(i => i.field !== 'kvkId'); }
 
-// live edits via delegation (no re-render -> no focus loss)
 $('forms').addEventListener('input', (e) => {
   const t = e.target; if (!t.classList || !t.classList.contains('ed')) return;
   const f = IMP.forms[+t.dataset.fi]; if (f && f.rows[+t.dataset.ri]) f.rows[+t.dataset.ri].data[t.dataset.col] = t.value;
 });
 $('forms').addEventListener('change', (e) => {
-  const t = e.target; if (!t.classList || !t.classList.contains('kvksel') || t.id.startsWith('bulk')) return;
-  const r = IMP.forms[+t.dataset.fi].rows[+t.dataset.ri]; r._kvkId = Number(t.value) || null; r._match = null; r._editKvk = false;
-  renderForms(); updateNeedNote();
+  const t = e.target;
+  if (t.classList && t.classList.contains('kvksel') && !t.id.startsWith('bulk')) {
+    const r = IMP.forms[+t.dataset.fi].rows[+t.dataset.ri]; r._kvkId = Number(t.value) || null; r._match = null; r._editKvk = false; if (r._kvkId) clearKvkIssue(r);
+    renderForms(); updateNeedNote();
+  } else if (t.classList && t.classList.contains('seasonsel')) {
+    const r = IMP.forms[+t.dataset.fi].rows[+t.dataset.ri]; r.data.seasonId = Number(t.value) || undefined;
+    r._issues = r._issues.filter(i => i.field !== 'seasonId');  // fixed -> clear the flag
+    renderForms();
+  }
 });
 
 function updateNeedNote() {
   const need = IMP.forms.reduce((a, f) => a + f.rows.filter(r => !r._kvkId).length, 0);
   $('needNote').textContent = need ? (need + ' row(s) still have no KVK — they will be skipped.') : 'All rows have a KVK.';
-  $('needNote').className = need ? 'pill warn' : 'pill ok';
+  $('needNote').className = need ? 'badge w' : 'badge ok';
 }
 
 commitBtn.onclick = async () => {
@@ -256,8 +315,7 @@ commitBtn.onclick = async () => {
   if (!confirm('Import this data into the database now?')) return;
   commitBtn.disabled = true; commitBtn.textContent = 'Importing…';
   try {
-    const forms = IMP.forms.map(f => ({ sheet: f.sheet, model: f.model,
-      records: f.rows.map(r => Object.assign({}, r.data, { _kvkId: r._kvkId, _kvkName: r._kvkName })) })).filter(f => f.records.length);
+    const forms = IMP.forms.map(f => ({ sheet: f.sheet, model: f.model, records: f.rows.map(r => Object.assign({}, r.data, { _kvkId: r._kvkId, _kvkName: r._kvkName })) })).filter(f => f.records.length);
     const r = await fetch('/api/commit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ forms }) });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || 'Import failed');
@@ -268,13 +326,13 @@ commitBtn.onclick = async () => {
 
 function renderCommit(rep) {
   const t = rep.totals;
-  let rowsHtml = (rep.forms || []).map(f => {
+  const rows = (rep.forms || []).map(f => {
     const errs = (f.failures || []).map(x => 'row ' + x.row + ' (kvk ' + x.kvkId + '): ' + esc(x.reason)).join('<br>');
     return '<tr><td>' + esc(f.label) + '</td><td>' + f.inserted + '</td><td>' + f.skipped + '</td><td>' + f.failed + '</td><td>' + f.noKvk + '</td><td class="muted" style="white-space:normal">' + errs + '</td></tr>';
   }).join('');
   $('commitResult').innerHTML = '<div class="box ' + (t.failed ? 'bad' : 'ok') + '" style="margin-top:14px">'
     + (t.failed ? '⚠️' : '✅') + ' Imported — <b>' + t.inserted + '</b> new rows, ' + t.skipped + ' already present, ' + t.failed + ' failed, ' + t.noKvk + ' skipped (no KVK).</div>'
-    + '<div class="scroll" style="margin-top:10px"><table><thead><tr><th>Form</th><th>inserted</th><th>skipped</th><th>failed</th><th>no-KVK</th><th>errors</th></tr></thead><tbody>' + rowsHtml + '</tbody></table></div>';
+    + '<div class="scroll" style="margin-top:10px"><table><thead><tr><th>Form</th><th>inserted</th><th>skipped</th><th>failed</th><th>no-KVK</th><th>errors</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 </script>
 </body>
