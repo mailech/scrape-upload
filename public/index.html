@@ -70,6 +70,9 @@
   tr.haswarn td { background:#fffdf6; }
   .lnk { background:none; border:0; color:#2563eb; font-size:12px; cursor:pointer; padding:0 4px; font-weight:600; }
   .lnk:hover { text-decoration:underline; }
+  .req { color:#dc2626; font-weight:700; }
+  td.reqempty { background:#fef2f2; box-shadow: inset 0 0 0 2px #fecaca; }
+  .legend { font-size:11px; color:#6b7280; margin:8px 0 2px; }
   input.ed { width:100%; min-width:90px; font-size:12px; padding:3px 5px; border:1px solid #d1d5db; border-radius:4px; }
   select.kvksel, select.seasonsel { font-size:12px; padding:4px 6px; max-width:230px; }
   .wmsg { color:#b45309; font-size:11px; margin-top:3px; }
@@ -204,7 +207,7 @@ function buildState() {
   IMP.forms = TR.forms.map(f => {
     const cols = [];
     f.rows.forEach(r => { if (r.data && !r.data.__error) Object.keys(r.data).forEach(k => { if (k !== 'kvkId' && !k.startsWith('_') && !cols.includes(k)) cols.push(k); }); });
-    return { sheet: f.sheet, label: f.label, model: f.model, modelMissing: f.modelMissing, fkFields: f.fkFields || {}, cols, editing: false,
+    return { sheet: f.sheet, label: f.label, model: f.model, modelMissing: f.modelMissing, fkFields: f.fkFields || {}, requiredFields: f.requiredFields || [], cols, editing: false,
       rows: f.rows.map(r => ({ data: Object.assign({}, r.data), _kvkId: r._kvkId, _kvkName: r._kvkName, _match: r._match, _issues: r._issues || [], _editKvk: false })) };
   });
 }
@@ -249,7 +252,7 @@ function renderForms() {
     const need = f.rows.filter(r => !r._kvkId).length;
     const bulk = need ? '<div class="row" style="margin:8px 0"><span class="muted" style="font-size:12px">Set all unmatched rows to:</span>'
       + '<select class="kvksel" id="bulk' + fi + '">' + kvkOptions('') + '</select><button class="lnk" onclick="bulkKvk(' + fi + ')">Apply</button></div>' : '';
-    const head = '<tr><th>#</th><th class="kvk">KVK</th>' + f.cols.map(c => '<th>' + pretty(c) + '</th>').join('') + '</tr>';
+    const head = '<tr><th>#</th><th class="kvk">KVK <span class="req">*</span></th>' + f.cols.map(c => '<th>' + pretty(c) + (f.requiredFields.includes(c) ? ' <span class="req">*</span>' : '') + '</th>').join('') + '</tr>';
     const grid = f.rows.map((r, ri) => {
       const cls = !r._kvkId ? ' class="nokvk"' : (r._issues.some(i => i.severity === 'warn') ? ' class="haswarn"' : '');
       const numc = ri + (f.editing ? ' <button class="lnk" title="delete row" onclick="removeRow(' + fi + ',' + ri + ')">✕</button>' : '');
@@ -257,9 +260,12 @@ function renderForms() {
       return '<tr' + cls + '><td style="white-space:nowrap">' + numc + '</td><td class="kvk">' + renderKvk(fi, ri, r) + '</td>' + cells + '</tr>';
     }).join('');
 
+    const mandEmpty = f.rows.reduce((a, r) => a + f.requiredFields.filter(c => { const v = r.data[c]; return v == null || String(v).trim() === ''; }).length, 0);
+    const legend = '<div class="legend"><span class="req">*</span> mandatory on the new site'
+      + (mandEmpty ? ' — <b style="color:#dc2626">' + mandEmpty + ' empty mandatory cell(s)</b> (red) — click “✎ edit values” to fill them' : ' — all mandatory cells are filled ✓') + '</div>';
     const open = (errs || f.editing) ? ' open' : '';
     return '<details class="form-acc"' + open + '><summary>' + esc(f.label) + ' <span class="muted">→ ' + esc(f.model) + '</span>' + badges + ' ' + editBtn + '</summary>'
-      + '<div class="body">' + issueTable + bulk + '<div class="scroll"><table><thead>' + head + '</thead><tbody>' + grid + '</tbody></table></div></div></details>';
+      + '<div class="body">' + issueTable + bulk + legend + '<div class="scroll"><table><thead>' + head + '</thead><tbody>' + grid + '</tbody></table></div></div></details>';
   }).join('');
 }
 
@@ -274,12 +280,15 @@ function renderKvk(fi, ri, r) {
 }
 
 function renderCell(fi, ri, c, d) {
-  const v = d[c];
   if (d.__error) return '<td class="muted">map error</td>';
+  const v = d[c];
+  const mand = IMP.forms[fi].requiredFields.includes(c);
+  const empty = v == null || String(v).trim() === '';
+  const cls = (mand && empty) ? ' class="reqempty"' : '';
   const fkmaster = IMP.forms[fi].fkFields[c];
-  if (fkmaster) return '<td><select class="fksel" data-fi="' + fi + '" data-ri="' + ri + '" data-col="' + esc(c) + '" data-master="' + esc(fkmaster) + '">' + masterOptions(fkmaster, v) + '</select></td>';
-  if (IMP.forms[fi].editing) return '<td><input class="ed" data-fi="' + fi + '" data-ri="' + ri + '" data-col="' + esc(c) + '" value="' + esc(v) + '"></td>';
-  return '<td title="' + esc(v) + '">' + cell(v) + '</td>';
+  if (fkmaster) return '<td' + cls + '><select class="fksel" data-fi="' + fi + '" data-ri="' + ri + '" data-col="' + esc(c) + '" data-master="' + esc(fkmaster) + '">' + masterOptions(fkmaster, v) + '</select></td>';
+  if (IMP.forms[fi].editing) return '<td' + cls + '><input class="ed" data-fi="' + fi + '" data-ri="' + ri + '" data-col="' + esc(c) + '" value="' + esc(v) + '"></td>';
+  return '<td' + cls + ' title="' + esc(v) + '">' + cell(v) + '</td>';
 }
 
 function toggleEdit(e, fi) { e.preventDefault(); e.stopPropagation(); IMP.forms[fi].editing = !IMP.forms[fi].editing; renderForms(); }
