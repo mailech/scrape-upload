@@ -76,6 +76,24 @@
   input.ed { width:100%; min-width:90px; font-size:12px; padding:3px 5px; border:1px solid #d1d5db; border-radius:4px; }
   select.kvksel, select.seasonsel { font-size:12px; padding:4px 6px; max-width:230px; }
   .wmsg { color:#b45309; font-size:11px; margin-top:3px; }
+
+  /* OFT result-tables preview — renders the way the new-site OFT Result page shows it */
+  .oftprev { margin-top:14px; }
+  .oftprev > .hd { font-size:12px; font-weight:700; color:#3730a3; margin:2px 0 8px; }
+  .oftcard { border:1px solid #e5e7eb; border-radius:8px; padding:12px 14px; margin-bottom:12px; background:#fcfcfd; }
+  .oftcard .t { font-size:13px; font-weight:600; color:#111827; margin-bottom:2px; }
+  .oftcard .k { font-size:11px; color:#6b7280; margin-bottom:8px; }
+  .oftchips { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 10px; }
+  .oftchip { font-size:11px; background:#eef2ff; color:#3730a3; border-radius:6px; padding:3px 8px; }
+  .oftchip b { color:#1e1b4b; }
+  table.oftr { width:auto; min-width:60%; border-collapse:collapse; font-size:12px; margin:8px 0; white-space:normal; }
+  table.oftr caption { text-align:left; font-weight:600; font-size:12px; color:#374151; padding:4px 0; }
+  table.oftr th, table.oftr td { border:1px solid #e5e7eb; padding:5px 9px; text-align:left; }
+  table.oftr th { background:#f1f5f9; color:#334155; font-weight:600; }
+  table.oftr td.rl { background:#f8fafc; font-weight:600; }
+  .oftrep { font-size:12px; color:#374151; margin-top:8px; line-height:1.5; }
+  .oftrep b { color:#111827; }
+  .oftrep .seg { margin-top:5px; }
 </style>
 </head>
 <body>
@@ -179,7 +197,8 @@ function renderRaw() {
     + t.recognised + ' recognised' + (t.unrecognised ? ', <span style="color:#b45309">' + t.unrecognised + ' not handled (ignored)</span>' : '') + '.';
   $('raw').innerHTML = RAW.sheets.map((s, i) => {
     const name = s.label ? (esc(s.label) + ' <span class="muted">(' + esc(s.sheet) + ')</span>') : ('<span style="color:#b45309">' + esc(s.sheet) + ' — not handled</span>');
-    const cols = s.headers.length ? s.headers : (s.rows[0] ? Object.keys(s.rows[0]) : []);
+    // hide the scraper's internal result-capture columns (objects) — they're rendered in the preview after Transform
+    const cols = (s.headers.length ? s.headers : (s.rows[0] ? Object.keys(s.rows[0]) : [])).filter(c => !/^__/.test(c) && !/^table\[/.test(c));
     const head = '<tr>' + cols.map(c => '<th>' + esc(c) + '</th>').join('') + '</tr>';
     const body = s.rows.slice(0, 50).map(row => '<tr>' + cols.map(c => '<td title="' + esc(row[c]) + '">' + cell(row[c]) + '</td>').join('') + '</tr>').join('');
     const more = s.rows.length > 50 ? '<div class="muted" style="padding:6px 8px">… and ' + (s.rows.length - 50) + ' more rows</div>' : '';
@@ -305,8 +324,32 @@ function renderForms() {
 
     const open = (errs || mandEmpty || f.editing) ? ' open' : '';
     return '<details class="form-acc"' + open + '><summary>' + esc(f.label) + ' <span class="muted">→ ' + esc(f.model) + '</span>' + badges + ' ' + editBtn + '</summary>'
-      + '<div class="body">' + issueTable + bulk + legend + '<div class="scroll"><table><thead>' + head + '</thead><tbody>' + grid + '</tbody></table></div></div></details>';
+      + '<div class="body">' + issueTable + bulk + legend + '<div class="scroll"><table><thead>' + head + '</thead><tbody>' + grid + '</tbody></table></div>' + oftPreview(f) + '</div></details>';
   }).join('');
+}
+
+// Render the OFT result exactly the way the new-site OFT Result page shows it: treatment options,
+// the parameter tables (columns × Farmer-Practice/TO1/TO2 rows), and the report text. Only for OFT
+// rows (they carry a nested `_oft` payload).
+function oftPreview(f) {
+  const rows = f.rows.filter(r => r.data && r.data._oft);
+  if (!rows.length) return '';
+  const cards = rows.map(r => {
+    const o = r.data._oft; const kn = r._kvkName || (r._kvkId ? ('#' + r._kvkId) : '(no KVK)');
+    const chips = (o.technologies || []).map(t => '<span class="oftchip"><b>' + esc(t.optionName) + '</b>: ' + esc(t.details) + '</span>').join('');
+    const tables = (o.tables || []).map(t => {
+      const head = '<tr>' + t.columns.map(c => '<th>' + esc(c.columnLabel) + '</th>').join('') + '</tr>';
+      const body = t.rows.map(rw => '<tr>' + t.columns.map((c, ci) => '<td' + (ci === 0 ? ' class="rl"' : '') + '>' + esc(rw.cells[c.columnKey]) + '</td>').join('') + '</tr>').join('');
+      return '<table class="oftr"><caption>' + esc(t.tableTitle) + '</caption><thead>' + head + '</thead><tbody>' + body + '</tbody></table>';
+    }).join('');
+    const rp = o.report || {};
+    const seg = (label, v) => v ? '<div class="seg"><b>' + label + ':</b> ' + esc(v) + '</div>' : '';
+    const report = '<div class="oftrep">' + seg('Final recommendation', rp.finalRecommendation) + seg('Result', rp.resultText)
+      + seg('Constraints & feedback', rp.constraintsFeedback) + seg('Farmers’ participation', rp.farmersParticipationProcess) + '</div>';
+    return '<div class="oftcard"><div class="t">' + esc(r.data.title) + '</div><div class="k">' + esc(kn) + ' · ' + (o.tables || []).length + ' result table(s)</div>'
+      + (chips ? '<div class="oftchips">' + chips + '</div>' : '') + tables + report + '</div>';
+  }).join('');
+  return '<div class="oftprev"><div class="hd">▼ Result preview — how these tables will appear on the site</div>' + cards + '</div>';
 }
 
 function renderKvk(fi, ri, r) {
